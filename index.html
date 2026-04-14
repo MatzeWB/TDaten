@@ -53,6 +53,12 @@
             color: #888888;
             background-color: #eeeeee;
         }
+        .debug {
+            margin-top: 20px;
+            font-size: 14px;
+            color: red;
+            white-space: pre-wrap;
+        }
         @media (max-width: 600px) {
             .station {
                 font-size: 18px;
@@ -69,6 +75,8 @@
     Lade Daten...
 </div>
 
+<div id="debug" class="debug"></div>
+
 <script>
     const stationList = [
     { id: "005056ba-7cb6-1ed2-bceb-5db7af7c4d1b", name: "STAR Boxdorf" },
@@ -81,7 +89,12 @@
     { id: "e1a15081-251e-9107-e040-0b0a3dfe563c", name: "HEM Lichtenau" }
     ];
 
-    const ids = stationList.map(s => s.id).join(",");
+    // 👉 IDs absichern
+    const validIds = stationList
+        .map(s => s.id)
+        .filter(id => /^[0-9a-f-]{36}$/.test(id));
+
+    const ids = validIds.join(",");
 
     const part1 = "MjE1NmEyMmMtNDkzZi00NzIw";
     const part2 = "LWE3YmMtOGRhNjU1OTkxMjY3";
@@ -92,9 +105,20 @@
     async function ladePreise() {
         const fuelType = "diesel";
 
+        const debugDiv = document.getElementById("debug");
+        debugDiv.innerHTML = "";
+
         try {
             const response = await fetch(apiUrl);
             const data = await response.json();
+
+            if (!data || data.ok !== true) {
+                throw new Error("API Fehler: " + (data.message || "unbekannt"));
+            }
+
+            if (!data.prices) {
+                throw new Error("Keine Preisdaten vorhanden");
+            }
 
             const container = document.getElementById("output");
             container.innerHTML = "";
@@ -102,18 +126,24 @@
             const stationen = data.prices;
 
             let prices = [];
+            let missingStations = [];
 
-            // HEM Lichtenau ausschließen
+            // 👉 Preise sammeln (nur gültige Zahlen)
             stationList.forEach(entry => {
                 if (entry.name === "HEM Lichtenau") return;
 
                 const station = stationen[entry.id];
-                if (station && station.status === "open" && station[fuelType] !== null) {
+
+                if (!station) {
+                    missingStations.push(entry.name);
+                    return;
+                }
+
+                if (station.status === "open" && typeof station[fuelType] === "number") {
                     prices.push(station[fuelType]);
                 }
             });
 
-            // 👉 FIX: leeres Array abfangen
             let minPrice = null;
             let maxPrice = null;
 
@@ -122,10 +152,11 @@
                 maxPrice = Math.max(...prices);
             }
 
+            // 👉 Anzeige
             stationList.forEach(entry => {
                 const station = stationen[entry.id];
 
-                if (station && station[fuelType] !== null) {
+                if (station && typeof station[fuelType] === "number") {
 
                     const price = station[fuelType];
 
@@ -140,14 +171,9 @@
                         div.classList.add("closed");
                     }
 
-                    // 👉 FIX: nur bewerten wenn min/max existiert
                     if (station.status === "open" && entry.name !== "HEM Lichtenau" && minPrice !== null) {
-                        if (price === minPrice) {
-                            div.classList.add("cheapest");
-                        }
-                        if (price === maxPrice) {
-                            div.classList.add("expensive");
-                        }
+                        if (price === minPrice) div.classList.add("cheapest");
+                        if (price === maxPrice) div.classList.add("expensive");
                     }
 
                     div.innerHTML = `
@@ -159,9 +185,17 @@
                 }
             });
 
+            // 👉 Debug-Ausgabe
+            if (missingStations.length > 0) {
+                debugDiv.innerHTML =
+                    "⚠️ Fehlende Daten für:\n" + missingStations.join("\n");
+            }
+
         } catch (error) {
             document.getElementById("output").innerHTML = "Fehler beim Laden der Daten.";
-            console.error(error);
+            debugDiv.innerHTML = "❌ " + error.message;
+
+            console.error("DETAIL:", error);
         }
     }
 
