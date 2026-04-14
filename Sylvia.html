@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kraftstoffpreise</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f6f8;
+            padding: 15px;
+        }
+        h1 {
+            text-align: center;
+            font-size: clamp(32px, 6vw, 64px);
+            font-weight: 800;
+            margin-bottom: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .station {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: white;
+            padding: 18px;
+            margin: 10px 0;
+            border-radius: 10px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .separator {
+            border-top: 6px solid #999;
+            margin-top: 40px;
+        }
+        .name {
+            text-align: left;
+        }
+        .price {
+            text-align: right;
+            min-width: 110px;
+        }
+        .cheapest {
+            background-color: #d4edda;
+        }
+        .expensive {
+            background-color: #f8d7da;
+        }
+        .closed {
+            color: #888888;
+            background-color: #eeeeee;
+        }
+        @media (max-width: 600px) {
+            .station {
+                font-size: 18px;
+                padding: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<h1>E10-Preise</h1>
+
+<div class="container" id="output">
+    Lade Daten...
+</div>
+
+<script>
+    const stationList = [
+    { id: "005056ba-7cb6-1ed2-bceb-5db7af7c4d1b", name: "STAR Boxdorf" },
+    { id: "bf39a8a9-49f8-4a9a-9f47-eb13aeac3d04", name: "OIL Radebeul" },
+    { id: "8d439c5f-ff9e-4904-8c4a-e586e86f0f58", name: "Shell Weinböhla" },
+    { id: "2754e744-4938-4a6c-8b7f-55a54a1ec57a", name: "ARAL Coswig" },
+    { id: "e1a15081-260f-9107-e040-0b0a3dfe563c", name: "HEM Hansastraße" },
+    { id: "6e661e05-fe9a-46d0-8b33-e31f13fac7b9", name: "AGIP Flughafen" },
+    { id: "4ca0f011-2d22-4ff6-832e-cee46038aaa2", name: "Sprint Meißen" },
+    { id: "e1a15081-251e-9107-e040-0b0a3dfe563c", name: "HEM Lichtenau" }
+    ];
+
+    const ids = stationList.map(s => s.id).join(",");
+
+    const part1 = "MjE1NmEyMmMtNDkzZi00NzIw";
+    const part2 = "LWE3YmMtOGRhNjU1OTkxMjY3";
+    const apiKey = atob(part1 + part2);
+
+    const apiUrl = `https://creativecommons.tankerkoenig.de/json/prices.php?ids=${ids}&apikey=${apiKey}`;
+
+    async function ladePreise() {
+        const fuelType = "e10";
+
+        try {
+            const response = await fetch(apiUrl);
+            const data = await response.json();
+
+            const container = document.getElementById("output");
+            container.innerHTML = "";
+
+            const stationen = data.prices;
+
+            let prices = [];
+
+            // HEM Lichtenau ausschließen
+            stationList.forEach(entry => {
+                if (entry.name === "HEM Lichtenau") return;
+
+                const station = stationen[entry.id];
+                if (station && station.status === "open" && station[fuelType] !== null) {
+                    prices.push(station[fuelType]);
+                }
+            });
+
+            // 👉 FIX: leeres Array abfangen
+            let minPrice = null;
+            let maxPrice = null;
+
+            if (prices.length > 0) {
+                minPrice = Math.min(...prices);
+                maxPrice = Math.max(...prices);
+            }
+
+            stationList.forEach(entry => {
+                const station = stationen[entry.id];
+
+                if (station && station[fuelType] !== null) {
+
+                    const price = station[fuelType];
+
+                    const div = document.createElement("div");
+                    div.className = "station";
+
+                    if (entry.name === "HEM Lichtenau") {
+                        div.classList.add("separator");
+                    }
+
+                    if (station.status !== "open") {
+                        div.classList.add("closed");
+                    }
+
+                    // 👉 FIX: nur bewerten wenn min/max existiert
+                    if (station.status === "open" && entry.name !== "HEM Lichtenau" && minPrice !== null) {
+                        if (price === minPrice) {
+                            div.classList.add("cheapest");
+                        }
+                        if (price === maxPrice) {
+                            div.classList.add("expensive");
+                        }
+                    }
+
+                    div.innerHTML = `
+                        <div class="name">${entry.name}${station.status !== "open" ? " (geschlossen)" : ""}:</div>
+                        <div class="price">${price.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €</div>
+                    `;
+
+                    container.appendChild(div);
+                }
+            });
+
+        } catch (error) {
+            document.getElementById("output").innerHTML = "Fehler beim Laden der Daten.";
+            console.error(error);
+        }
+    }
+
+    ladePreise();
+    setInterval(ladePreise, 300000);
+</script>
+
+</body>
+</html>
